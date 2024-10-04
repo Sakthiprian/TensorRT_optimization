@@ -38,20 +38,18 @@ def allocate_buffers(engine):
 
 def do_inference(engine, input_name, output_name, h_input, d_input, h_output, d_output, stream):
     with engine.create_execution_context() as context:
+        context.set_tensor_address(input_name, int(d_input))
+        context.set_tensor_address(output_name, int(d_output))
+
         # Transfer the input data to the GPU
         cuda.memcpy_htod_async(d_input, h_input, stream)
 
-        # Set tensor addresses (ensure names are correct)
-        context.set_tensor_address(input_name, int(d_input))
-        context.set_tensor_address(output_name, int(d_output))
-        
         # Run inference asynchronously
         context.execute_async_v3(stream_handle=stream.handle)
         
         # Transfer the output data back to the CPU
         cuda.memcpy_dtoh_async(h_output, d_output, stream)
         stream.synchronize()
-
         return h_output
     
 # After running inference and before your program exits
@@ -59,7 +57,6 @@ def cleanup(d_input, d_output, stream):
     # Free GPU memory
     d_input.free()
     d_output.free()
-    
     # Synchronize and clean up the stream
     stream.synchronize()  # Ensure all operations on the stream are finished
     del stream  # Delete the stream if no longer needed
@@ -74,10 +71,7 @@ input_data = np.expand_dims(input_data, axis=0)  # Add batch dimension
 
 runtime = trt.Runtime(TRT_LOGGER)
 engine = load_engine(load_engine_path, runtime)
-
-# Allocate buffers
 input_name, output_name, h_input, d_input, h_output, d_output, stream = allocate_buffers(engine)
-
 # Copy input data to GPU memory
 np.copyto(h_input, input_data.ravel())  # Flattened array
 
